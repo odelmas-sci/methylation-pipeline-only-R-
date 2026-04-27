@@ -1,10 +1,11 @@
 #!/usr/bin/env Rscript
 # run_pipeline.R
 #
-# Orchestrates the 3-part methylation preprocessing pipeline:
+# Orchestrates the 4-part methylation preprocessing pipeline:
 #   Stage 1 — Part1_read_idat.R   : run per batch, in parallel
 #   Stage 2 — Part2_qc.R          : run per batch, in parallel (after Stage 1)
 #   Stage 3 — Part3_betas.R       : single combined run (after Stage 2)
+#   Stage 4 — Part4_pca.R         : PCA visualization colored by batch (after Stage 3)
 #
 # Checkpointing: each stage checks for its output files before running. (Caching to avoid unnecessary reruns.))
 # Existing outputs are skipped; rerun specific stages with --force-part{N}.
@@ -18,13 +19,16 @@
 #   --force-part1     Force rerun Stage 1 even if cached
 #   --force-part2     Force rerun Stage 2 even if cached
 #   --force-part3     Force rerun Stage 3 even if cached
+#   --force-part4     Force rerun Stage 4 even if cached
+#   --meta-cols A,B   Comma-separated pData column names to color PCA by (default: Batch)
 #
 # Output layout:
 #   <outdir>/batch<N>/     Per-batch outputs from Part 1 and Part 2
 #   <outdir>/combined/     Combined outputs from Part 3
+#   <outdir>/pca/          PCA plot and coordinates from Part 4
 #   <outdir>/pipeline.log  Orchestrator log
 #
-# Required packages: minfi, parallel
+# Required packages: minfi, parallel, matrixStats, ggplot2
 
 suppressPackageStartupMessages(library(parallel))
 
@@ -54,7 +58,9 @@ if (length(argv) < 3) {
         "  --cores N         Parallel workers (default: physical cores - 1)\n",
         "  --force-part1     Force rerun Stage 1 (Part 1) even if outputs exist\n",
         "  --force-part2     Force rerun Stage 2 (Part 2) even if outputs exist\n",
-        "  --force-part3     Force rerun Stage 3 (Part 3) even if outputs exist\n"
+        "  --force-part3     Force rerun Stage 3 (Part 3) even if outputs exist\n",
+        "  --force-part4     Force rerun Stage 4 (Part 4) even if outputs exist\n",
+        "  --meta-cols A,B   pData columns to color PCA by, comma-separated (default: Batch)\n"
     ))
     quit(status = 1)
 }
@@ -65,7 +71,8 @@ outdir       <- argv[3]
 
 n_cores     <- max(1L, detectCores(logical = FALSE) - 1L)
 batches_arg <- NULL
-force1 <- force2 <- force3 <- FALSE
+meta_cols   <- "Batch"
+force1 <- force2 <- force3 <- force4 <- FALSE
 
 i <- 4L
 while (i <= length(argv)) {
@@ -75,9 +82,13 @@ while (i <= length(argv)) {
     } else if (argv[i] == "--cores" && i < length(argv)) {
         n_cores <- as.integer(argv[i + 1L])
         i <- i + 2L
+    } else if (argv[i] == "--meta-cols" && i < length(argv)) {
+        meta_cols <- argv[i + 1L]
+        i <- i + 2L
     } else if (argv[i] == "--force-part1") { force1 <- TRUE; i <- i + 1L
     } else if (argv[i] == "--force-part2") { force2 <- TRUE; i <- i + 1L
     } else if (argv[i] == "--force-part3") { force3 <- TRUE; i <- i + 1L
+    } else if (argv[i] == "--force-part4") { force4 <- TRUE; i <- i + 1L
     } else { i <- i + 1L }
 }
 
@@ -96,6 +107,7 @@ script_dir   <- get_script_dir()
 part1_script <- normalizePath(file.path(script_dir, "Part1_read_idat.R"), mustWork = TRUE)
 part2_script <- normalizePath(file.path(script_dir, "Part2_qc.R"),        mustWork = TRUE)
 part3_script <- normalizePath(file.path(script_dir, "Part3_betas.R"),     mustWork = TRUE)
+part4_script <- normalizePath(file.path(script_dir, "Part4_pca.R"),       mustWork = TRUE)
 
 # -- Determine batches from sample sheet ---------------------------------------
 
@@ -118,7 +130,8 @@ log_msg("Data dir     : ", datadir,               file = pipeline_log)
 log_msg("Output dir   : ", outdir,                file = pipeline_log)
 log_msg("Batches      : ", paste(batches, collapse = ", "), file = pipeline_log)
 log_msg("Max workers  : ", n_cores,               file = pipeline_log)
-log_msg("Force flags  : part1=", force1, " part2=", force2, " part3=", force3, file = pipeline_log)
+log_msg("Meta columns : ", meta_cols,                file = pipeline_log)
+log_msg("Force flags  : part1=", force1, " part2=", force2, " part3=", force3, " part4=", force4, file = pipeline_log)
 
 pipeline_start <- proc.time()[["elapsed"]]
 
@@ -322,6 +335,48 @@ if (!force3 && file.exists(beta_csv) && file.exists(mset_rds) && file.exists(fla
     log_msg(sprintf("  SUCCESS (%ds)  log: %s", elapsed, log_file3), file = pipeline_log)
 }
 
+# --------------------------------------------------------------------------------
+# STAGE 4 — Part 4: PCA visualization (single run, after Stage 3)
+#
+# Cached when:  pca/pca_by_batch.pdf  AND  pca/.completed_part4  both exist
+# Log file:     <outdir>/pca/part4.log
+# --------------------------------------------------------------------------------
+
+log_msg("", file = pipeline_log)
+log_msg("--- Stage 4: PCA Visualization ---", file = pipeline_log)
+
+pca_dir <- file.path(outdir, "pca")
+flag_p4 <- file.path(pca_dir, ".completed_part4")
+
+dir.create(pca_dir, recursive = TRUE, showWarnings = FALSE)
+
+# Split comma-separated column string into individual args for Part 4
+meta_col_args <- strsplit(meta_cols, ",")[[1]]
+
+log_msg(sprintf("  Metadata columns: %s", paste(meta_col_args, collapse = ", ")),
+        file = pipeline_log)
+
+if (!force4 && file.exists(flag_p4)) {
+    log_msg("  Outputs already exist — skipping (use --force-part4 to rerun)",
+            file = pipeline_log)
+} else {
+    log_file4 <- file.path(pca_dir, "part4.log")
+    t0 <- proc.time()[["elapsed"]]
+
+    rc <- system2("Rscript",
+        args   = c(part4_script, combined_dir, pca_dir, meta_col_args),
+        stdout = log_file4, stderr = log_file4, wait = TRUE
+    )
+
+    elapsed <- as.integer(round(proc.time()[["elapsed"]] - t0))
+
+    if (rc != 0L || !file.exists(flag_p4)) {
+        log_msg(sprintf("  FAILED (%ds)  log: %s", elapsed, log_file4), file = pipeline_log)
+        quit(status = 1L)
+    }
+    log_msg(sprintf("  SUCCESS (%ds)  log: %s", elapsed, log_file4), file = pipeline_log)
+}
+
 # -- Final summary -------------------------------------------------------------
 
 total_elapsed <- as.integer(round(proc.time()[["elapsed"]] - pipeline_start))
@@ -334,4 +389,5 @@ log_msg(sprintf("Batches in beta : %s", paste(batches_p3, collapse = ", ")),
         file = pipeline_log)
 log_msg(sprintf("Beta values     : %s", beta_csv),  file = pipeline_log)
 log_msg(sprintf("mSet (NOOB)     : %s", mset_rds),  file = pipeline_log)
+log_msg(sprintf("PCA plots       : %s/pca_by_<col>.pdf", pca_dir), file = pipeline_log)
 log_msg(sprintf("Full log        : %s", pipeline_log), file = pipeline_log)
