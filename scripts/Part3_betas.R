@@ -16,6 +16,17 @@ cat("=== Part 3: NOOB Normalization (Combined) ===\n")
 cat("Batches:", paste(batch_list, collapse=", "), "\n")
 cat("Output directory:", output_dir, "\n\n")
 
+# Skip if already completed
+flag_done    <- file.path(output_dir, ".completed")
+beta_csv_chk <- file.path(output_dir, "beta_values_combined.csv")
+mset_rds_chk <- file.path(output_dir, "mSet_noob_combined.rds")
+if (file.exists(flag_done) && file.exists(beta_csv_chk) && file.exists(mset_rds_chk)) {
+    cat("Part 3 already completed — skipping.\n")
+    quit(status = 0)
+}
+
+tryCatch({
+
 # Load all RGChannelSets and combine
 rgSet_list <- list()
 for (i in seq_along(batch_list)) {
@@ -59,4 +70,12 @@ saveRDS(mSet, file = file.path(output_dir, "mSet_noob_combined.rds"))
 saveRDS(gRatioSet, file = file.path(output_dir, "gRatioSet_combined.rds"))
 write.csv(beta, file = file.path(output_dir, "beta_values_combined.csv"), row.names = TRUE)
 
+# create success/failure flag for clear data provenance
+writeLines("SUCCESS", file.path(output_dir, ".completed"))
 cat("NOOB normalization completed!\n")
+
+}, error = function(e) {
+    cat("ERROR in Part 3:", conditionMessage(e), "\n")
+    writeLines(paste("FAILED:", conditionMessage(e)), file.path(output_dir, ".failed"))
+    quit(status = 1)
+})
