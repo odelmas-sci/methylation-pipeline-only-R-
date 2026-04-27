@@ -73,8 +73,8 @@ tryCatch({
              "\nAvailable columns: ", paste(colnames(pd), collapse = ", "))
     }
 
-    # Subset to top 20k most variable probes for speed
-    n_probes <- min(20000L, nrow(beta))
+    # Subset to top 40k most variable probes
+    n_probes <- min(40000L, nrow(beta))
     cat(sprintf("Selecting top %d most variable probes...\n", n_probes))
     probe_var  <- matrixStats::rowVars(beta, na.rm = TRUE)
     top_probes <- order(probe_var, decreasing = TRUE)[seq_len(n_probes)]
@@ -132,7 +132,7 @@ tryCatch({
             )
 
         out_png <- file.path(outdir, sprintf("pca_by_%s.png", col))
-        ggsave(out_png, plot = p, width = 7, height = 6, dpi = 600)
+        ggsave(out_png, plot = p, width = 7, height = 7, dpi = 600)
         cat("  Saved:", out_png, "\n")
     }
 
