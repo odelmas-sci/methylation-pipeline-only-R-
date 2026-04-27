@@ -1,5 +1,5 @@
 #!/usr/bin/env Rscript
-# run_pipeline.R
+# main.R
 #
 # Orchestrates the 4-part methylation preprocessing pipeline:
 #   Stage 1 — Part1_read_idat.R   : run per batch, in parallel
@@ -11,7 +11,7 @@
 # Existing outputs are skipped; rerun specific stages with --force-part{N}.
 #
 # Usage:
-#   Rscript run_pipeline.R <sample_sheet> <datadir> <outdir> [options]
+#   Rscript main.R <sample_sheet> <datadir> <outdir> [options]
 #
 # Options:
 #   --batches 1,2,3   Only process these batch numbers (default: all from sample sheet)
@@ -52,7 +52,7 @@ argv <- commandArgs(trailingOnly = TRUE)
 
 if (length(argv) < 3) {
     cat(paste0(
-        "Usage: Rscript run_pipeline.R <sample_sheet> <datadir> <outdir> [options]\n\n",
+        "Usage: Rscript main.R <sample_sheet> <datadir> <outdir> [options]\n\n",
         "Options:\n",
         "  --batches 1,2,3   Run only specific batches (default: all)\n",
         "  --cores N         Parallel workers (default: physical cores - 1)\n",
