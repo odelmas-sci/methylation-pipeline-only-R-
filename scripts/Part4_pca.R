@@ -4,7 +4,7 @@
 #
 # Usage: Rscript Part4_pca.R <combined_dir> <outdir> [col1 col2 ...]
 #
-# One PDF is produced per metadata column. Columns must exist in pData of
+# One png is produced per metadata column. Columns must exist in pData of
 # gRatioSet_combined.rds. Numeric columns get a continuous color scale;
 # character/factor columns get a discrete palette.
 # Defaults to "Batch" if no columns are supplied.
@@ -125,15 +125,15 @@ tryCatch({
                 x     = x_lab,
                 y     = y_lab
             ) +
-            theme_bw(base_size = 12) +
+            theme_bw() +
             theme(
-                plot.title      = element_text(hjust = 0.5),
-                legend.position = "right"
+                plot.title      = element_text(hjust = 0.5, face = 'bold'),
+                legend.position = "bottom"
             )
 
-        out_pdf <- file.path(outdir, sprintf("pca_by_%s.pdf", col))
-        ggsave(out_pdf, plot = p, width = 7, height = 6)
-        cat("  Saved:", out_pdf, "\n")
+        out_png <- file.path(outdir, sprintf("pca_by_%s.png", col))
+        ggsave(out_png, plot = p, width = 7, height = 6, dpi = 600)
+        cat("  Saved:", out_png, "\n")
     }
 
     writeLines(paste(meta_cols, collapse = ","), flag_done)
