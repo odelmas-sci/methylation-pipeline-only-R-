@@ -15,6 +15,15 @@ cat("=== Part 2: Quality Control ===\n")
 cat("Batch:", batch, "\n")
 cat("Batch directory:", batch_dir, "\n\n")
 
+# Skip if already completed
+flag_done  <- file.path(batch_dir, ".completed_part2")
+qc_csv_chk <- file.path(batch_dir, paste0("qc_summary_batch", batch, ".csv"))
+detp_chk   <- file.path(batch_dir, paste0("detP_batch", batch, ".rds"))
+if (file.exists(flag_done) && file.exists(qc_csv_chk) && file.exists(detp_chk)) {
+    cat("Part 2 already completed for batch", batch, "— skipping.\n")
+    quit(status = 0)
+}
+
 # Load required libraries
 suppressPackageStartupMessages({
     if (!require("minfi", quietly = TRUE)) {
@@ -80,10 +89,13 @@ tryCatch({
     
     dev.off()
     
+    # create success/failure flag for clear data prrovenance
+    writeLines("SUCCESS", file.path(batch_dir, ".completed_part2"))
     cat("Part 2 QC completed successfully!\n")
     cat("QC summary saved to:", file.path(batch_dir, paste0("qc_summary_batch", batch, ".csv")), "\n")
-    
+
 }, error = function(e) {
     cat("Error in Part 2 QC:", conditionMessage(e), "\n")
+    writeLines(paste("FAILED:", conditionMessage(e)), file.path(batch_dir, ".failed_part2"))
     quit(status = 1)
 })
