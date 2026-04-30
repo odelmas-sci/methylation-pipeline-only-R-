@@ -46,6 +46,42 @@ log_msg <- function(..., file = "") {
     invisible(NULL)
 }
 
+log_reproducibility_info <- function(file = "") { # enhanced reproducibility
+  
+  # R version and platform
+  rv <- R.version
+  log_msg("R Version:  ", rv$version.string, file = file)
+  log_msg("Platform:   ", rv$platform, file = file)
+  log_msg("OS:         ", utils::sessionInfo()$running, file = file)
+  
+  # Date/time and timezone
+  log_msg("Date/Time:  ", format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z"), file = file)
+  log_msg("Timezone:   ", Sys.timezone(), file = file)
+  
+  # Locale
+  log_msg("Locale:     ", Sys.getlocale("LC_ALL"), file = file)
+  
+  # Loaded packages and versions
+  log_msg("--- Loaded Packages ---", file = file)
+  pkgs <- utils::sessionInfo()$otherPkgs
+  if (length(pkgs) == 0) {
+    log_msg("(no packages loaded beyond base)", file = file)
+  } else {
+    for (pkg in pkgs) {
+      log_msg(sprintf("  %-25s %s", pkg$Package, pkg$Version), file = file)
+    }
+  }
+  
+  # Random seed
+  seed <- tryCatch(.Random.seed[2], error = function(e) NA)
+  log_msg("RNG Seed:   ", ifelse(is.na(seed), "not yet initialized", seed), file = file)
+  
+  # Working directory
+  log_msg("Working Dir:", getwd(), file = file)
+  
+  invisible(NULL)
+}
+
 # -- Argument parsing ----------------------------------------------------------
 
 argv <- commandArgs(trailingOnly = TRUE)
@@ -134,6 +170,8 @@ log_msg("Meta columns : ", meta_cols,                file = pipeline_log)
 log_msg("Force flags  : part1=", force1, " part2=", force2, " part3=", force3, " part4=", force4, file = pipeline_log)
 
 pipeline_start <- proc.time()[["elapsed"]]
+
+log_reproducibility_info()
 
 # --------------------------------------------------------------------------------
 # STAGE 1 — Part 1: Read IDAT files (parallel per batch)
