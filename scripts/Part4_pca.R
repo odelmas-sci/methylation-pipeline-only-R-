@@ -82,6 +82,8 @@ tryCatch({
 
     # prcomp expects samples as rows
     cat("Running PCA...\n")
+    cat("Setting seed to 42 for reproducibility...\n")
+    set.seed(42)
     pca     <- prcomp(t(beta_sub), center = TRUE, scale. = FALSE)
     pct_var <- round(100 * pca$sdev^2 / sum(pca$sdev^2), 1)
 
