@@ -62,13 +62,16 @@ log_reproducibility_info <- function(file = "") { # enhanced reproducibility
   log_msg("Locale:     ", Sys.getlocale("LC_ALL"), file = file)
   
   # Loaded packages and versions
-  log_msg("--- Loaded Packages ---", file = file)
-  pkgs <- utils::sessionInfo()$otherPkgs
-  if (length(pkgs) == 0) {
-    log_msg("(no packages loaded beyond base)", file = file)
+  log_msg("--- Installed Packages ---", file = file)
+  pkgs <- as.data.frame(installed.packages()[, c("Package", "Version")],
+                        stringsAsFactors = FALSE)
+  pkgs <- pkgs[order(pkgs$Package), ]
+  if (nrow(pkgs) == 0) {
+    log_msg("(no installed packages found)", file = file)
   } else {
-    for (pkg in pkgs) {
-      log_msg(sprintf("  %-25s %s", pkg$Package, pkg$Version), file = file)
+    for (i in seq_len(nrow(pkgs))) {
+      log_msg(sprintf("  %-25s %s", pkgs$Package[i], pkgs$Version[i]),
+              file = file)
     }
   }
   
