@@ -64,11 +64,28 @@ gRatioSet <- ratioConvert(mSet, what = "both", keepCN = TRUE)
 cat("Extracting beta values...\n")
 beta <- getBeta(gRatioSet)
 
+cat("Loading annotation...")
+annot <- as.data.frame(read.table"scripts/EPIC.hg38.manifest.tsv",
+                                  sep = "\t", header = T)
+rownames(annot) = annot$probeID
+
+annot<-annot[rownames(annot) %in% rownames(beta),]
+
+#filter crossreactive, polymorphic probes at the single base extension, X, Y, M and ch
+betas2 <- beta[rownames(beta) %in% rownames(annot[annot$CpG_chrm!="chrY" &
+                                            annot$CpG_chrm!="chrX" &
+                                            annot$CpG_chrm!="chrM" &
+                                            annot$probeType=="cg" &
+                                            annot$MASK_general==FALSE,]),]
+print(dim(betas2))
+
+
 # Save results
 cat("Saving results...\n")
 saveRDS(mSet, file = file.path(output_dir, "mSet_noob_combined.rds"))
 saveRDS(gRatioSet, file = file.path(output_dir, "gRatioSet_combined.rds"))
 write.csv(beta, file = file.path(output_dir, "beta_values_combined.csv"), row.names = TRUE)
+write.csv(betas2, file = file.path(output_dir,"beta_values_combined_filtered.csv"), row.names = TRUE)
 
 # create success/failure flag for clear data provenance
 writeLines("SUCCESS", file.path(output_dir, ".completed"))
