@@ -30,6 +30,7 @@
 #
 # Required packages: minfi, parallel, matrixStats, ggplot2
 
+
 suppressPackageStartupMessages(library(parallel))
 
 # -- Helpers ------------------------------------------------------------------
@@ -150,7 +151,7 @@ part4_script <- normalizePath(file.path(script_dir, "Part4_pca.R"),       mustWo
 
 # -- Determine batches from sample sheet ---------------------------------------
 
-sheet   <- read.csv(sample_sheet, stringsAsFactors = FALSE)
+sheet   <- read.csv(sample_sheet, skip = 8, header = TRUE,  stringsAsFactors = FALSE)
 targets <- subset(sheet, substr(Sample_Plate, 1L, 1L) == "M")
 targets$Batch <- as.integer(factor(targets$Sample_Plate))
 all_batches   <- sort(unique(targets$Batch))
@@ -267,28 +268,51 @@ log_msg("", file = pipeline_log)
 log_msg("--- Stage 2: QC Analysis ---", file = pipeline_log)
 
 worker_part2 <- function(p) {
+  
+  tryCatch({
+    
     batch_dir <- file.path(p$outdir, paste0("batch", p$batch))
-
+    
     qc_csv   <- file.path(batch_dir, paste0("qc_summary_batch", p$batch, ".csv"))
     detp_rds <- file.path(batch_dir, paste0("detP_batch",       p$batch, ".rds"))
     flag_p2  <- file.path(batch_dir, ".completed_part2")
-
+    
     if (!p$force && file.exists(qc_csv) && file.exists(detp_rds) && file.exists(flag_p2)) {
-        return(list(batch = p$batch, status = "cached", dir = batch_dir, elapsed = 0L))
+      return(list(batch = p$batch, status = "cached", dir = batch_dir, elapsed = 0L))
     }
-
+    
     log_file <- file.path(batch_dir, "part2.log")
     t0 <- proc.time()[["elapsed"]]
-
+    
     rc <- system2("Rscript",
-        args   = c(p$script, p$batch, batch_dir),
-        stdout = log_file, stderr = log_file, wait = TRUE
+                  args   = c(p$script, p$batch, batch_dir),
+                  stdout = log_file, stderr = log_file, wait = TRUE
     )
-
+    
     elapsed <- as.integer(round(proc.time()[["elapsed"]] - t0))
-    ok      <- rc == 0L && file.exists(qc_csv) && file.exists(flag_p2)
-    list(batch = p$batch, status = if (ok) "success" else "failed",
-         dir = batch_dir, elapsed = elapsed, log = log_file)
+    
+    ok <- (rc == 0L &&
+             file.exists(qc_csv) &&
+             file.exists(flag_p2))
+    
+    return(list(
+      batch   = p$batch,
+      status  = if (ok) "success" else "failed",
+      dir     = batch_dir,
+      elapsed = elapsed,
+      log     = log_file
+    ))
+    
+  }, error = function(e) {
+    
+    return(list(
+      batch  = p$batch,
+      status = "error",
+      dir    = file.path(p$outdir, paste0("batch", p$batch)),
+      error  = as.character(e)
+    ))
+    
+  })
 }
 
 params2 <- lapply(batches_p2, function(b) list(
@@ -322,7 +346,7 @@ for (r in part2_res) {
     log_msg(msg, file = pipeline_log)
 }
 
-part2_ok   <- sapply(part2_res, function(r) r$status %in% c("success", "cached"))
+part2_ok   <- unlist(sapply(part2_res, function(r) r$status %in% c("success", "cached")))
 batches_p3 <- batches_p2[part2_ok]
 log_msg(sprintf("Stage 2 complete: %d/%d batches OK", sum(part2_ok), length(batches_p2)),
         file = pipeline_log)
