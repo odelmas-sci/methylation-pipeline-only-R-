@@ -46,6 +46,46 @@ cat("\nCombining batches...\n")
 rgSet_combined <- do.call(cbind, rgSet_list)
 cat("Combined", ncol(rgSet_combined), "samples across", length(batch_list), "batches\n")
 
+# Remove certain annotations 
+cat("\nLoading annotation dataset...\n")
+annot <- as.data.frame(read.table("scripts/EPIC.hg38.manifest.tsv",
+                                  sep = "\t", header = T))
+rownames(annot) = annot$probeID
+
+cat("\nFiltering annotation...\n")
+    
+# Filter crossreactive, polymorphic probes at the single base extension, X, Y, M and ch
+annot_filt <- annot[
+  annot$CpG_chrm != "chrX" &
+  annot$CpG_chrm != "chrY" &
+  annot$CpG_chrm != "chrM" &
+  annot$probeType == "cg" &
+  annot$MASK_general == FALSE,
+]
+
+cat("Saving annotation-filtered probe lists...\n")
+
+# All probes in original annotation
+all_probes <- rownames(annot)
+# Probes that pass annotation filtering
+kept_probes_annot <- rownames(annot_filt)
+# Probes removed by annotation rules
+removed_probes_annot <- setdiff(all_probes, kept_probes_annot)
+
+write.table(
+  removed_probes_annot,
+  file = file.path(output_dir, "probes_removed_annotation_filters.txt"),
+  quote = FALSE,
+  row.names = FALSE,
+  col.names = FALSE
+)
+
+cat("Removed", length(removed_probes_annot), "probes via annotation filtering\n")
+
+cat("Subsetting RGSet to filtered probes...\n")
+keep_probes <- intersect(rownames(annot_filt), rownames(rgSet_combined))
+rgSet_combined <- rgSet_combined[keep_probes, ]
+    
 # Free memory from list
 rm(rgSet_list)
 gc()
@@ -64,28 +104,11 @@ gRatioSet <- ratioConvert(mSet, what = "both", keepCN = TRUE)
 cat("Extracting beta values...\n")
 beta <- getBeta(gRatioSet)
 
-cat("Loading annotation...")
-annot <- as.data.frame(read.table"scripts/EPIC.hg38.manifest.tsv",
-                                  sep = "\t", header = T)
-rownames(annot) = annot$probeID
-
-annot<-annot[rownames(annot) %in% rownames(beta),]
-
-#filter crossreactive, polymorphic probes at the single base extension, X, Y, M and ch
-betas2 <- beta[rownames(beta) %in% rownames(annot[annot$CpG_chrm!="chrY" &
-                                            annot$CpG_chrm!="chrX" &
-                                            annot$CpG_chrm!="chrM" &
-                                            annot$probeType=="cg" &
-                                            annot$MASK_general==FALSE,]),]
-print(dim(betas2))
-
-
 # Save results
 cat("Saving results...\n")
 saveRDS(mSet, file = file.path(output_dir, "mSet_noob_combined.rds"))
 saveRDS(gRatioSet, file = file.path(output_dir, "gRatioSet_combined.rds"))
 write.csv(beta, file = file.path(output_dir, "beta_values_combined.csv"), row.names = TRUE)
-write.csv(betas2, file = file.path(output_dir,"beta_values_combined_filtered.csv"), row.names = TRUE)
 
 # create success/failure flag for clear data provenance
 writeLines("SUCCESS", file.path(output_dir, ".completed"))
