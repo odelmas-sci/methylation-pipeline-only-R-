@@ -33,12 +33,13 @@ if (!dir.exists(outdir)) {
 }
 
 # Read sample sheet
-sheet <- read.csv(sample_sheet, stringsAsFactors = FALSE)
+sheet   <- read.csv(sample_sheet, skip = 8, header = TRUE,  stringsAsFactors = FALSE)
 sheet$Basename <- paste0(sheet$Sentrix_ID, "_", sheet$Sentrix_Position)
 
 # Filter for target samples (those starting with "M")
 targets <- subset(sheet, substr(Sample_Plate, 1, 1) == "M")
 targets$Batch <- as.integer(factor(targets$Sample_Plate))
+
 
 # Filter for current batch
 batch_targets <- subset(targets, Batch == batch)
