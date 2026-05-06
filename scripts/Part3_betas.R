@@ -45,6 +45,26 @@ for (i in seq_along(batch_list)) {
 cat("\nCombining batches...\n")
 rgSet_combined <- do.call(cbind, rgSet_list)
 cat("Combined", ncol(rgSet_combined), "samples across", length(batch_list), "batches\n")
+    
+# Free memory from list
+rm(rgSet_list)
+gc()
+
+# Perform NOOB normalization on combined data
+cat("Performing NOOB normalization on combined dataset...\n")
+mSet <- preprocessNoob(rgSet_combined)
+
+# Free memory from raw data
+rm(rgSet_combined)
+gc()
+
+cat("Converting to ratio set...\n")
+gRatioSet <- ratioConvert(mSet, what = "both", keepCN = TRUE)
+
+cat("Extracting beta values...\n")
+beta <- getBeta(gRatioSet)
+
+cat("\nApplying annotation-based probe filtering...\n")
 
 # Remove certain annotations 
 cat("\nLoading annotation dataset...\n")
@@ -82,27 +102,13 @@ write.table(
 
 cat("Removed", length(removed_probes_annot), "probes via annotation filtering\n")
 
-cat("Subsetting RGSet to filtered probes...\n")
-keep_probes <- intersect(rownames(annot_filt), rownames(rgSet_combined))
-rgSet_combined <- rgSet_combined[keep_probes, ]
+cat("Subsetting Beta to filtered probes...\n")
     
-# Free memory from list
-rm(rgSet_list)
-gc()
+keep_probes <- intersect(rownames(beta), rownames(annot_filt))
 
-# Perform NOOB normalization on combined data
-cat("Performing NOOB normalization on combined dataset...\n")
-mSet <- preprocessNoob(rgSet_combined)
+beta <- beta[keep_probes, ]
 
-# Free memory from raw data
-rm(rgSet_combined)
-gc()
-
-cat("Converting to ratio set...\n")
-gRatioSet <- ratioConvert(mSet, what = "both", keepCN = TRUE)
-
-cat("Extracting beta values...\n")
-beta <- getBeta(gRatioSet)
+cat("Beta matrix now contains", nrow(beta), "probes and", ncol(beta), "samples\n")
 
 # Save results
 cat("Saving results...\n")
