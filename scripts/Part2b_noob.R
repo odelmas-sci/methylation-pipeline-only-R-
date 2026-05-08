@@ -19,6 +19,7 @@ cat("Output dir:", outdir, "\n\n")
 
 suppressPackageStartupMessages({
     library(minfi)
+    library(ENmix)
 })
 
 if (!dir.exists(outdir)) {
