@@ -4,6 +4,7 @@
 # Orchestrates the 4-part methylation preprocessing pipeline:
 #   Stage 1 — Part1_read_idat.R   : run per batch, in parallel
 #   Stage 2 — Part2_qc.R          : run per batch, in parallel (after Stage 1)
+#   Stage 2b — Part2b_noob_per_batch.R: run per batch, in parellel (after Stage 1)
 #   Stage 3 — Part3_betas.R       : single combined run (after Stage 2)
 #   Stage 4 — Part4_pca.R         : PCA visualization colored by batch (after Stage 3)
 #
