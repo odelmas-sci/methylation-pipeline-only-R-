@@ -5,7 +5,7 @@
 args <- commandArgs(trailingOnly = TRUE)
 
 if (length(args) < 3) {
-    stop("Usage: Rscript Part2b_noob_per_batch.R <batch> <batch_dir> <outdir>")
+    stop("Usage: Rscript Part2b_noob.R <batch> <batch_dir> <outdir>")
 }
 
 batch     <- as.integer(args[1])
