@@ -1,3 +1,4 @@
+#!/usr/bin/env Rscript
 
 # Part 2b: Per-batch NOOB normalization
 
