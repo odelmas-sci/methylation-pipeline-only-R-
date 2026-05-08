@@ -4,7 +4,7 @@
 args <- commandArgs(trailingOnly = TRUE)
 
 if (length(args) < 3) {
-    stop("Usage: Rscript noob_normalize.R <batch_list> <batch_dirs...> <output_dir>")
+    stop("Usage: Rscript betas.R <batch_list> <batch_dirs...> <output_dir>")
 }
 
 # Parse arguments
@@ -12,7 +12,7 @@ batch_list <- as.integer(strsplit(args[1], ",")[[1]])
 output_dir <- args[length(args)]
 batch_dirs <- args[2:(length(args)-1)]
 
-cat("=== Part 3: NOOB Normalization (Combined) ===\n")
+cat("=== Part 3: Calculating Betas (Combined) ===\n")
 cat("Batches:", paste(batch_list, collapse=", "), "\n")
 cat("Output directory:", output_dir, "\n\n")
 
@@ -28,35 +28,40 @@ if (file.exists(flag_done) && file.exists(beta_csv_chk) && file.exists(mset_rds_
 tryCatch({
 
 # Load all RGChannelSets and combine
-rgSet_list <- list()
+mSet_list <- list()
+
 for (i in seq_along(batch_list)) {
-    batch <- batch_list[i]
+    batch     <- batch_list[i]
     batch_dir <- batch_dirs[i]
 
-    rgset_file <- file.path(batch_dir, paste0("rgSet_batch", batch, ".rds"))
-    if (file.exists(rgset_file)) {
-        cat("Loading batch", batch, "...\n")
-        rgSet_list[[i]] <- readRDS(rgset_file)
-        cat("Loaded batch", batch, "with", ncol(rgSet_list[[i]]), "samples\n")
+    mset_file <- file.path(
+        batch_dir,
+        paste0("mSet_noob_batch", batch, ".rds")
+    )
+
+    if (!file.exists(mset_file)) {
+        stop("Missing mSet file for batch ", batch)
     }
+
+    cat("Loading NOOB-normalized batch", batch, "...\n")
+    mSet_list[[i]] <- readRDS(mset_file)
+    cat("  Samples:", ncol(mSet_list[[i]]), "\n")
 }
 
-# Combine all batches
-cat("\nCombining batches...\n")
-rgSet_combined <- do.call(cbind, rgSet_list)
-cat("Combined", ncol(rgSet_combined), "samples across", length(batch_list), "batches\n")
-    
-# Free memory from list
-rm(rgSet_list)
+cat("\nCombining NOOB-normalized batches...\n")
+mSet <- do.call(cbind, mSet_list)
+cat("Combined", ncol(mSet), "samples\n")
+
+rm(mSet_list)
 gc()
 
-# Perform NOOB normalization on combined data
-cat("Performing NOOB normalization on combined dataset...\n")
-mSet <- preprocessNoob(rgSet_combined)
+cat("Running ENmix QCinfo...\n")
+QCinfo <- ENmix::QCinfo(mSet)
 
-# Free memory from raw data
-rm(rgSet_combined)
-gc()
+saveRDS(QCinfo, file.path(output_dir, "QCinfo_combined.rds"))
+
+cat("QCinfo completed — stopping here temporarily.\n")
+quit(status = 0) #--------------------------------------------------------> TEMPORARY STOP IN THE PIPELINE, comment/uncomment when needed
 
 cat("Converting to ratio set...\n")
 gRatioSet <- ratioConvert(mSet, what = "both", keepCN = TRUE)
