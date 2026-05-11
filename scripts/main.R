@@ -167,15 +167,15 @@ part4_script <- normalizePath(file.path(script_dir, "Part4_pca.R"),       mustWo
 # -- Determine batches from sample sheet ---------------------------------------
 sheet <- read.csv(sample_sheet, skip = 8, header = TRUE, stringsAsFactors = FALSE)
 
-if (!plate_col %in% colnames(sheet)) {
-    stop("Plate column '", plate_col, "' not found in sample sheet")
+if (!batch_col %in% colnames(sheet)) {
+    stop("Batch column '", batch_col, "' not found in sample sheet")
 }
 
 # Filter for target samples (those starting with "M") ---------------------- > This part may be unnecessary
-# targets <- sheet[substr(sheet[[plate_col]], 1L, 1L) == "M", ]
+# targets <- sheet[substr(sheet[[batch_col]], 1L, 1L) == "M", ]
 
 # Define batch IDs based on plate column
-targets$Batch <- as.integer(factor(targets[[plate_col]]))
+targets$Batch <- as.integer(factor(targets[[batch_col]]))
 all_batches   <- sort(unique(targets$Batch))
 batches <- if (!is.null(batches_arg)) batches_arg else all_batches
 
