@@ -4,6 +4,7 @@
 # Orchestrates the 4-part methylation preprocessing pipeline:
 #   Stage 1 — Part1_read_idat.R   : run per batch, in parallel
 #   Stage 2 — Part2_qc.R          : run per batch, in parallel (after Stage 1)
+#   Stage 2b — Part2b_noob.R      : run per batch, in parellel (after Stage 1)
 #   Stage 3 — Part3_betas.R       : single combined run (after Stage 2)
 #   Stage 4 — Part4_pca.R         : PCA visualization colored by batch (after Stage 3)
 #
@@ -18,6 +19,7 @@
 #   --cores N         Max parallel workers for Stage 1 and 2 (default: nCores - 1) 
 #   --force-part1     Force rerun Stage 1 even if cached
 #   --force-part2     Force rerun Stage 2 even if cached
+#   --force-part2b    Force rerun Stage 2 part b even if cached
 #   --force-part3     Force rerun Stage 3 even if cached
 #   --force-part4     Force rerun Stage 4 even if cached
 #   --meta-cols A,B   Comma-separated pData column names to color PCA by (default: Batch)
@@ -28,7 +30,7 @@
 #   <outdir>/pca/          PCA plot and coordinates from Part 4
 #   <outdir>/pipeline.log  Orchestrator log
 #
-# Required packages: minfi, parallel, matrixStats, ggplot2
+# Required packages: minfi, parallel, matrixStats, ggplot2, ENmix
 
 
 suppressPackageStartupMessages(library(parallel))
@@ -112,7 +114,7 @@ outdir       <- argv[3]
 n_cores     <- max(1L, detectCores(logical = FALSE) - 1L)
 batches_arg <- NULL
 meta_cols   <- "Batch"
-force1 <- force2 <- force3 <- force4 <- FALSE
+force1 <- force2 <- force2b <- force3 <- force4 <- FALSE
 
 i <- 4L
 while (i <= length(argv)) {
@@ -127,6 +129,7 @@ while (i <= length(argv)) {
         i <- i + 2L
     } else if (argv[i] == "--force-part1") { force1 <- TRUE; i <- i + 1L
     } else if (argv[i] == "--force-part2") { force2 <- TRUE; i <- i + 1L
+    } else if (argv[i] == "--force-part2b") { force2b <- TRUE; i <- i + 1L
     } else if (argv[i] == "--force-part3") { force3 <- TRUE; i <- i + 1L
     } else if (argv[i] == "--force-part4") { force4 <- TRUE; i <- i + 1L
     } else { i <- i + 1L }
@@ -146,6 +149,7 @@ writeLines(character(0), pipeline_log)
 script_dir   <- get_script_dir()
 part1_script <- normalizePath(file.path(script_dir, "Part1_read_idat.R"), mustWork = TRUE)
 part2_script <- normalizePath(file.path(script_dir, "Part2_qc.R"),        mustWork = TRUE)
+part2b_script <- normalizePath(file.path(script_dir, "Part2b_noob.R"),    mustWork = TRUE)
 part3_script <- normalizePath(file.path(script_dir, "Part3_betas.R"),     mustWork = TRUE)
 part4_script <- normalizePath(file.path(script_dir, "Part4_pca.R"),       mustWork = TRUE)
 
@@ -171,7 +175,7 @@ log_msg("Output dir   : ", outdir,                file = pipeline_log)
 log_msg("Batches      : ", paste(batches, collapse = ", "), file = pipeline_log)
 log_msg("Max workers  : ", n_cores,               file = pipeline_log)
 log_msg("Meta columns : ", meta_cols,                file = pipeline_log)
-log_msg("Force flags  : part1=", force1, " part2=", force2, " part3=", force3, " part4=", force4, file = pipeline_log)
+log_msg("Force flags  : part1=", force1, " part2=", force2, " part2b=", force2b, " part3=", force3, " part4=", force4, file = pipeline_log)
 
 pipeline_start <- proc.time()[["elapsed"]]
 
@@ -352,7 +356,68 @@ log_msg(sprintf("Stage 2 complete: %d/%d batches OK", sum(part2_ok), length(batc
         file = pipeline_log)
 
 # --------------------------------------------------------------------------------
-# STAGE 3 — Part 3: NOOB normalization (single combined run)
+# STAGE 2b — Part 2b: Per-batch NOOB normalization
+#
+# Cached when:  mSet_noob_batch<batch>.rds  AND  .completed  both exist
+# Log file:     <outdir>/batch<batch>/part2b.log
+# --------------------------------------------------------------------------------
+
+log_msg("", file = pipeline_log)
+log_msg("--- Stage 2b: NOOB normalization (per batch) ---", file = pipeline_log)
+
+if (length(batches_p2) == 0L) {
+    log_msg("ERROR: No batches passed Stage 1 + 2. Cannot run Stage 2b.",
+            file = pipeline_log)
+    quit(status = 1L)
+}
+
+for (batch in batches_p2) {
+
+    batch_dir  <- file.path(outdir, paste0("batch", batch))
+    log_file2b <- file.path(batch_dir, "part2b.log")
+    mset_rds   <- file.path(batch_dir,
+                            paste0("mSet_noob_batch", batch, ".rds"))
+    flag_p2b   <- file.path(batch_dir, ".completed")
+
+    if (!force2b && file.exists(mset_rds) && file.exists(flag_p2b)) {
+        log_msg(sprintf("  Batch %d: outputs already exist — skipping (use --force-part2b to rerun)",
+                        batch),
+                file = pipeline_log)
+        next
+    }
+
+    log_msg(sprintf("  Batch %d: running NOOB normalization", batch),
+            file = pipeline_log)
+
+    t0 <- proc.time()[["elapsed"]]
+
+    rc <- system2(
+        "Rscript",
+        args   = c(part2b_script,
+                   batch,
+                   batch_dir,
+                   batch_dir),
+        stdout = log_file2b,
+        stderr = log_file2b,
+        wait   = TRUE
+    )
+
+    elapsed <- as.integer(round(proc.time()[["elapsed"]] - t0))
+
+    if (rc != 0L || !file.exists(mset_rds)) {
+        log_msg(sprintf("  Batch %d: FAILED (%ds)  log: %s",
+                        batch, elapsed, log_file2b),
+                file = pipeline_log)
+        quit(status = 1L)
+    }
+
+    log_msg(sprintf("  Batch %d: SUCCESS (%ds)  log: %s",
+                    batch, elapsed, log_file2b),
+            file = pipeline_log)
+}
+                            
+# --------------------------------------------------------------------------------
+# STAGE 3 — Part 3: Calculate Betas (single combined run)
 #
 # Cached when:  mSet_noob_combined.rds  AND  beta_values_combined.csv  both exist
 # Log file:     <outdir>/combined/part3.log
