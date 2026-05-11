@@ -2,11 +2,12 @@
 # main.R
 #
 # Orchestrates the 4-part methylation preprocessing pipeline:
-#   Stage 1 — Part1_read_idat.R   : run per batch, in parallel
-#   Stage 2 — Part2_qc.R          : run per batch, in parallel (after Stage 1)
-#   Stage 2b — Part2b_noob.R      : run per batch, in parellel (after Stage 1)
-#   Stage 3 — Part3_betas.R       : single combined run (after Stage 2)
-#   Stage 4 — Part4_pca.R         : PCA visualization colored by batch (after Stage 3)
+#   Stage 1 — Part1_read_idat.R   : run per batch, in parallel - read IDAT files ("raw data")
+#   Stage 2 — Part2_qc.R          : run per batch, in parallel (after Stage 1) - detection P-value QC on raw data
+#   Stage 2b — Part2b_noob.R      : run per batch, in parellel (after Stage 1) - Noob Normalization raw data
+#   Stage 2c — Part2c_qc_info.R   : single combined run (after Stage 2b) - evaluate QC info from ENmix on Noob Normalized values
+#   Stage 3 — Part3_betas.R       : single combined run (after Stage 2c) - calculate Betas and some annotation filtering
+#   Stage 4 — Part4_pca.R         : PCA visualization colored by batch (after Stage 3) - generate PCA plots
 #
 # Checkpointing: each stage checks for its output files before running. (Caching to avoid unnecessary reruns.))
 # Existing outputs are skipped; rerun specific stages with --force-part{N}.
@@ -20,6 +21,7 @@
 #   --force-part1     Force rerun Stage 1 even if cached
 #   --force-part2     Force rerun Stage 2 even if cached
 #   --force-part2b    Force rerun Stage 2 part b even if cached
+#   --force-part2c    Force rerun Stage 2 part c even if cached
 #   --force-part3     Force rerun Stage 3 even if cached
 #   --force-part4     Force rerun Stage 4 even if cached
 #   --meta-cols A,B   Comma-separated pData column names to color PCA by (default: Batch)
@@ -100,6 +102,8 @@ if (length(argv) < 3) {
         "  --cores N         Parallel workers (default: physical cores - 1)\n",
         "  --force-part1     Force rerun Stage 1 (Part 1) even if outputs exist\n",
         "  --force-part2     Force rerun Stage 2 (Part 2) even if outputs exist\n",
+        "  --force-part2b     Force rerun Stage 2b (Part 2b) even if outputs exist\n",
+        "  --force-part2c     Force rerun Stage 2c (Part 2c) even if outputs exist\n",
         "  --force-part3     Force rerun Stage 3 (Part 3) even if outputs exist\n",
         "  --force-part4     Force rerun Stage 4 (Part 4) even if outputs exist\n",
         "  --meta-cols A,B   pData columns to color PCA by, comma-separated (default: Batch)\n"
@@ -114,7 +118,7 @@ outdir       <- argv[3]
 n_cores     <- max(1L, detectCores(logical = FALSE) - 1L)
 batches_arg <- NULL
 meta_cols   <- "Batch"
-force1 <- force2 <- force2b <- force3 <- force4 <- FALSE
+force1 <- force2 <- force2b <- force2c <- force3 <- force4 <- FALSE
 
 i <- 4L
 while (i <= length(argv)) {
@@ -130,6 +134,7 @@ while (i <= length(argv)) {
     } else if (argv[i] == "--force-part1") { force1 <- TRUE; i <- i + 1L
     } else if (argv[i] == "--force-part2") { force2 <- TRUE; i <- i + 1L
     } else if (argv[i] == "--force-part2b") { force2b <- TRUE; i <- i + 1L
+    } else if (argv[i] == "--force-part2c") { force2c <- TRUE; i <- i + 1L
     } else if (argv[i] == "--force-part3") { force3 <- TRUE; i <- i + 1L
     } else if (argv[i] == "--force-part4") { force4 <- TRUE; i <- i + 1L
     } else { i <- i + 1L }
@@ -150,6 +155,7 @@ script_dir   <- get_script_dir()
 part1_script <- normalizePath(file.path(script_dir, "Part1_read_idat.R"), mustWork = TRUE)
 part2_script <- normalizePath(file.path(script_dir, "Part2_qc.R"),        mustWork = TRUE)
 part2b_script <- normalizePath(file.path(script_dir, "Part2b_noob.R"),    mustWork = TRUE)
+part2c_script <- normalizePath(file.path(script_dir, "Part2c_qc_info.R"), mustWork = TRUE)
 part3_script <- normalizePath(file.path(script_dir, "Part3_betas.R"),     mustWork = TRUE)
 part4_script <- normalizePath(file.path(script_dir, "Part4_pca.R"),       mustWork = TRUE)
 
@@ -415,27 +421,92 @@ for (batch in batches_p2) {
                     batch, elapsed, log_file2b),
             file = pipeline_log)
 }
+
+# --------------------------------------------------------------------------------
+# STAGE 2c — Part 2c: ENmix QCinfo (single combined run)
+#
+# Cached when:  QCinfo_combined.rds  AND  .completed  both exist
+# Log file:     <outdir>/combined/part2c.log
+# --------------------------------------------------------------------------------
+
+log_msg("", file = pipeline_log)
+log_msg("--- Stage 2c: ENmix QCinfo (combined) ---", file = pipeline_log)
+
+qcinfo_rds  <- file.path(combined_dir, "QCinfo_combined.rds")
+flag_p2c    <- file.path(combined_dir, ".completed")
+
+if (!force2c && file.exists(qcinfo_rds) && file.exists(flag_p2c)) {
+    log_msg("  QCinfo already exists — skipping (use --force-part2c to rerun)",
+            file = pipeline_log)
+} else {
+
+    log_file2c <- file.path(combined_dir, "part2c.log")
+
+    log_msg(sprintf("  Running QCinfo on %d batches: %s",
+                    length(batches_p3),
+                    paste(batches_p3, collapse = ", ")),
+            file = pipeline_log)
+
+    t0 <- proc.time()[["elapsed"]]
+
+    batch_dirs_p2c <- file.path(outdir, paste0("batch", batches_p3))
+
+    rc <- system2(
+        "Rscript",
+        args = c(part2c_script,
+                 paste(batches_p3, collapse = ","),
+                 batch_dirs_p2c,
+                 combined_dir),
+        stdout = log_file2c,
+        stderr = log_file2c,
+        wait   = TRUE
+    )
+
+    elapsed <- as.integer(round(proc.time()[["elapsed"]] - t0))
+
+    if (rc != 0L || !file.exists(qcinfo_rds)) {
+        log_msg(sprintf("  FAILED (%ds)  log: %s", elapsed, log_file2c),
+                file = pipeline_log)
+        quit(status = 1L)
+    }
+
+    log_msg(sprintf("  SUCCESS (%ds)  log: %s", elapsed, log_file2c),
+            file = pipeline_log)
+}
                             
 # --------------------------------------------------------------------------------
 # STAGE 3 — Part 3: Calculate Betas (single combined run)
 #
-# Cached when:  mSet_noob_combined.rds  AND  beta_values_combined.csv  both exist
+# Cached when:  mSet_noob_combined.rds  AND  beta_values_combined.csv  both exist                        
+# Cached when:  beta_values_combined_filtered.csv AND gRatioSet_combined.rds both exist
 # Log file:     <outdir>/combined/part3.log
 # --------------------------------------------------------------------------------
 
 log_msg("", file = pipeline_log)
-log_msg("--- Stage 3: NOOB Normalization ---", file = pipeline_log)
+log_msg("--- Stage 3: Calculate Betas ---", file = pipeline_log)
 
 if (length(batches_p3) == 0L) {
     log_msg("ERROR: No batches passed Stage 1 + 2. Cannot run Stage 3.", file = pipeline_log)
     quit(status = 1L)
 }
 
-beta_csv <- file.path(combined_dir, "beta_values_combined.csv")
-mset_rds <- file.path(combined_dir, "mSet_noob_combined.rds")
-flag_p3  <- file.path(combined_dir, ".completed")
+# Guard to check for QC information before starting stage 3
+qcinfo_rds <- file.path(combined_dir, "QCinfo_combined.rds")
+if (!file.exists(qcinfo_rds)) {
+    log_msg("ERROR: QCinfo missing. Stage 2c must run before Stage 3.",
+            file = pipeline_log)
+    quit(status = 1L)
+}
 
-if (!force3 && file.exists(beta_csv) && file.exists(mset_rds) && file.exists(flag_p3)) {
+beta_csv <- file.path(combined_dir, "beta_values_combined_filtered.csv")
+gratio_rds <- file.path(combined_dir, "gRatioSet_combined.rds")
+flag_p3 <- file.path(combined_dir, ".completed")
+
+if (!force3 &&
+    file.exists(beta_csv) &&
+    file.exists(gratio_rds) &&
+    file.exists(flag_p3)) {
+
     log_msg("  Outputs already exist — skipping (use --force-part3 to rerun)",
             file = pipeline_log)
 } else {
