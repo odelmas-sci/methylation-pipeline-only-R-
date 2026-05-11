@@ -10,7 +10,7 @@ flowchart TB
     P1 --> P2[Part 2: Detection P-Value QC]
     P1 --> P2b[Part 2b: Noob Normalize Idat Data]
 
-    P2 --> Merge[Part 2c: Merge Results and more QC]
+    P2 --> Merge[Part 2c: Merge Results and ENmix QC]
     P2b --> Merge
 
     Merge --> P3[Part 3: Calculate Beta Values and Filter]
