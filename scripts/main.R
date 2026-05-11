@@ -17,6 +17,7 @@
 #
 # Options:
 #   --batches 1,2,3   Only process these batch numbers (default: all from sample sheet)
+#   --batch-col NAME    Sample sheet column defining plate/batch (default: Sample_Plate)
 #   --cores N         Max parallel workers for Stage 1 and 2 (default: nCores - 1) 
 #   --force-part1     Force rerun Stage 1 even if cached
 #   --force-part2     Force rerun Stage 2 even if cached
@@ -99,6 +100,7 @@ if (length(argv) < 3) {
         "Usage: Rscript main.R <sample_sheet> <datadir> <outdir> [options]\n\n",
         "Options:\n",
         "  --batches 1,2,3   Run only specific batches (default: all)\n",
+        "  --batch-col NAME  Sample sheet column defining plate/batch (default: Sample_Plate)\n",
         "  --cores N         Parallel workers (default: physical cores - 1)\n",
         "  --force-part1     Force rerun Stage 1 (Part 1) even if outputs exist\n",
         "  --force-part2     Force rerun Stage 2 (Part 2) even if outputs exist\n",
@@ -114,7 +116,7 @@ if (length(argv) < 3) {
 sample_sheet <- argv[1]
 datadir      <- argv[2]
 outdir       <- argv[3]
-
+batch_col    <- "Sample_Plate"
 n_cores     <- max(1L, detectCores(logical = FALSE) - 1L)
 batches_arg <- NULL
 meta_cols   <- "Batch"
@@ -124,6 +126,9 @@ i <- 4L
 while (i <= length(argv)) {
     if (argv[i] == "--batches" && i < length(argv)) {
         batches_arg <- as.integer(strsplit(argv[i + 1L], ",")[[1]])
+        i <- i + 2L
+     } else if (argv[i] == "--batch-col" && i < length(argv)) {
+        batch_col <- argv[i + 1L]
         i <- i + 2L
     } else if (argv[i] == "--cores" && i < length(argv)) {
         n_cores <- as.integer(argv[i + 1L])
@@ -160,12 +165,18 @@ part3_script <- normalizePath(file.path(script_dir, "Part3_betas.R"),     mustWo
 part4_script <- normalizePath(file.path(script_dir, "Part4_pca.R"),       mustWork = TRUE)
 
 # -- Determine batches from sample sheet ---------------------------------------
+sheet <- read.csv(sample_sheet, skip = 8, header = TRUE, stringsAsFactors = FALSE)
 
-sheet   <- read.csv(sample_sheet, skip = 8, header = TRUE,  stringsAsFactors = FALSE)
-targets <- subset(sheet, substr(Sample_Plate, 1L, 1L) == "M")
-targets$Batch <- as.integer(factor(targets$Sample_Plate))
+if (!plate_col %in% colnames(sheet)) {
+    stop("Plate column '", plate_col, "' not found in sample sheet")
+}
+
+# Filter for target samples (those starting with "M") ---------------------- > This part may be unnecessary
+# targets <- sheet[substr(sheet[[plate_col]], 1L, 1L) == "M", ]
+
+# Define batch IDs based on plate column
+targets$Batch <- as.integer(factor(targets[[plate_col]]))
 all_batches   <- sort(unique(targets$Batch))
-
 batches <- if (!is.null(batches_arg)) batches_arg else all_batches
 
 if (length(invalid <- setdiff(batches, all_batches)) > 0)
@@ -179,6 +190,7 @@ log_msg("Sample sheet : ", sample_sheet,          file = pipeline_log)
 log_msg("Data dir     : ", datadir,               file = pipeline_log)
 log_msg("Output dir   : ", outdir,                file = pipeline_log)
 log_msg("Batches      : ", paste(batches, collapse = ", "), file = pipeline_log)
+log_msg("Batch column : ", batch_col, file = pipeline_log)
 log_msg("Max workers  : ", n_cores,               file = pipeline_log)
 log_msg("Meta columns : ", meta_cols,                file = pipeline_log)
 log_msg("Force flags  : part1=", force1, " part2=", force2, " part2b=", force2b, " part3=", force3, " part4=", force4, file = pipeline_log)
