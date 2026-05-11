@@ -172,8 +172,9 @@ if (!batch_col %in% colnames(sheet)) {
 }
 
 # Filter for target samples (those starting with "M") ---------------------- > This part may be unnecessary
-# targets <- sheet[substr(sheet[[batch_col]], 1L, 1L) == "M", ]
-
+#targets <- sheet[substr(sheet[[batch_col]], 1L, 1L) == "M", ]
+targets <- sheet
+                   
 # Define batch IDs based on plate column
 targets$Batch <- as.integer(factor(targets[[batch_col]]))
 all_batches   <- sort(unique(targets$Batch))
