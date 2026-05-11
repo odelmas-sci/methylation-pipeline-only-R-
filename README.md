@@ -46,7 +46,7 @@ Run the full pipeline with:
 Rscript main.R <sheetname.csv> <datadir> <outdir>
 ```
 
-## Other Parameters that can be set:
+## Default of other Options:
 
 ```bash
     batches      = [1, 2, 3]
