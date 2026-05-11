@@ -43,7 +43,7 @@ Illumina IDAT files must be available in a single directory.
 Run the full pipeline with:
 
 ```bash
-Rscript main.R <sample_sheet.csv> <data_dir> <output_dir>
+Rscript main.R <sheetname.csv> <datadir> <outdir>
 ```
 
 ## Other Parameters that can be set:
