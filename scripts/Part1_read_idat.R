@@ -14,6 +14,10 @@ sample_sheet <- args[2]
 datadir <- args[3]
 outdir <- args[4]
 
+batch_col <- if (length(args) >= 5) args[5] else "Sample_Plate"
+cat("Using batch column:", batch_col, "\n")
+
+
 cat("=== Part 1: Preprocessing ===\n")
 cat("Batch:", batch, "\n")
 cat("Sample sheet:", sample_sheet, "\n")
@@ -36,10 +40,21 @@ if (!dir.exists(outdir)) {
 sheet   <- read.csv(sample_sheet, skip = 8, header = TRUE,  stringsAsFactors = FALSE)
 sheet$Basename <- paste0(sheet$Sentrix_ID, "_", sheet$Sentrix_Position)
 
-# Filter for target samples (those starting with "M")
-targets <- subset(sheet, substr(Sample_Plate, 1, 1) == "M")
-targets$Batch <- as.integer(factor(targets$Sample_Plate))
+if (!batch_col %in% colnames(sheet)) {
+    stop("Column '", batch_col, "' not found in sample sheet")
+}
 
+# Filter for target samples (those starting with "M") -- NOT NECESSARY (only a product of the toy data we've been using)
+use_prefix_filter <- FALSE
+
+# Define targets
+targets <- if (use_prefix_filter) {
+    sheet[substr(sheet[[batch_col]], 1, 1) == "M", ]
+} else {
+    sheet
+}
+
+targets$Batch <- as.integer(factor(targets[[batch_col]]))
 
 # Filter for current batch
 batch_targets <- subset(targets, Batch == batch)
