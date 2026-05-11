@@ -476,8 +476,7 @@ if (!force2c && file.exists(qcinfo_rds) && file.exists(flag_p2c)) {
                             
 # --------------------------------------------------------------------------------
 # STAGE 3 — Part 3: Calculate Betas (single combined run)
-#
-# Cached when:  mSet_noob_combined.rds  AND  beta_values_combined.csv  both exist                        
+#                        
 # Cached when:  beta_values_combined_filtered.csv AND gRatioSet_combined.rds both exist
 # Log file:     <outdir>/combined/part3.log
 # --------------------------------------------------------------------------------
