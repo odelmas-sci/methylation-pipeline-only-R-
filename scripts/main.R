@@ -194,7 +194,7 @@ log_msg("Batches      : ", paste(batches, collapse = ", "), file = pipeline_log)
 log_msg("Batch column : ", batch_col, file = pipeline_log)
 log_msg("Max workers  : ", n_cores,               file = pipeline_log)
 log_msg("Meta columns : ", meta_cols,                file = pipeline_log)
-log_msg("Force flags  : part1=", force1, " part2=", force2, " part2b=", force2b, " part3=", force3, " part4=", force4, file = pipeline_log)
+log_msg("Force flags  : part1=", force1, " part2=", force2, " part2b=", force2b, " part2c=", force2c, " part3=", force3, " part4=", force4, file = pipeline_log)
 
 pipeline_start <- proc.time()[["elapsed"]]
 
