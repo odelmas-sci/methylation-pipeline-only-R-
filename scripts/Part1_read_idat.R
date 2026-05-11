@@ -63,7 +63,7 @@ cat("Processing", nrow(batch_targets), "samples in batch", batch, "\n")
 
 # Read IDAT files
 tryCatch({
-    rgSet <- read.metharray.exp(targets = batch_targets, base = datadir)
+    rgSet <- read.metharray.exp(targets = batch_targets, base = datadir, extended = TRUE)
     
     # Save raw RGChannelSet
     saveRDS(rgSet, file = file.path(outdir, paste0("rgSet_batch", batch, ".rds")))
