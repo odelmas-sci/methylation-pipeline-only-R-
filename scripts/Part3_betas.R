@@ -19,55 +19,41 @@ cat("Output directory:", output_dir, "\n\n")
 # Skip if already completed
 flag_done    <- file.path(output_dir, ".completed")
 beta_csv_chk <- file.path(output_dir, "beta_values_combined.csv")
-mset_rds_chk <- file.path(output_dir, "mSet_noob_combined.rds")
-if (file.exists(flag_done) && file.exists(beta_csv_chk) && file.exists(mset_rds_chk)) {
+
+if (file.exists(flag_done) &&
+    file.exists(beta_csv_chk)) {
+    cat("Part 3 already completed — skipping.\n")
+    quit(status = 0)
+}
+
+if (!file.exists(qcinfo_file)) {
+    stop("QCinfo not found. Run Part2c_qc_info.R first.")
+}
+if (file.exists(flag_done) && file.exists(beta_csv_chk)) {
     cat("Part 3 already completed — skipping.\n")
     quit(status = 0)
 }
 
 tryCatch({
 
-# Load all RGChannelSets and combine
-mSet_list <- list()
-
-for (i in seq_along(batch_list)) {
-    batch     <- batch_list[i]
-    batch_dir <- batch_dirs[i]
-
-    mset_file <- file.path(
-        batch_dir,
-        paste0("mSet_noob_batch", batch, ".rds")
-    )
-
-    if (!file.exists(mset_file)) {
-        stop("Missing mSet file for batch ", batch)
-    }
-
-    cat("Loading NOOB-normalized batch", batch, "...\n")
-    mSet_list[[i]] <- readRDS(mset_file)
-    cat("  Samples:", ncol(mSet_list[[i]]), "\n")
+# Load mSet file
+mset_file <- file.path(output_dir, "mSet_noob_combined.rds")
+if (!file.exists(mset_file)) {
+    stop("Missing combined MethylSet: ", mset_file)
 }
 
-cat("\nCombining NOOB-normalized batches...\n")
-mSet <- do.call(cbind, mSet_list)
-cat("Combined", ncol(mSet), "samples\n")
-
-rm(mSet_list)
-gc()
-
-cat("Running ENmix QCinfo...\n")
-QCinfo <- ENmix::QCinfo(mSet)
-
-saveRDS(QCinfo, file.path(output_dir, "QCinfo_combined.rds"))
-
-cat("QCinfo completed — stopping here temporarily.\n")
-quit(status = 0) #--------------------------------------------------------> TEMPORARY STOP IN THE PIPELINE, comment/uncomment when needed
+mSet <- readRDS(mset_file)
+    
+# Load QC info and combine
+qcinfo_file <- file.path(output_dir, "QCinfo_combined.rds")
+QCinfo <- readRDS(file.path(output_dir, "QCinfo_combined.rds"))
 
 cat("Converting to ratio set...\n")
 gRatioSet <- ratioConvert(mSet, what = "both", keepCN = TRUE)
 
 cat("Extracting beta values...\n")
 beta <- getBeta(gRatioSet)
+write.csv(beta, file = file.path(output_dir, "beta_values_combined.csv"), row.names = TRUE)
 
 cat("\nApplying annotation-based probe filtering...\n")
 
@@ -119,7 +105,7 @@ cat("Beta matrix now contains", nrow(beta), "probes and", ncol(beta), "samples\n
 cat("Saving results...\n")
 saveRDS(mSet, file = file.path(output_dir, "mSet_noob_combined.rds"))
 saveRDS(gRatioSet, file = file.path(output_dir, "gRatioSet_combined.rds"))
-write.csv(beta, file = file.path(output_dir, "beta_values_combined.csv"), row.names = TRUE)
+write.csv(beta, file = file.path(output_dir, "beta_values_combined_filtered.csv"), row.names = TRUE)
 
 # create success/failure flag for clear data provenance
 writeLines("SUCCESS", file.path(output_dir, ".completed"))
