@@ -1,9 +1,26 @@
-# methylation-pipeline-only-R-
-This is a second version of the original pipeline built with Nextflow. This version is supposed to help parallelize within R alone.
+# Methylation Pipeline in R
+This is a version of preprocessing Methylation data (no batch correction). This is to help parallelize within R.
+
+```mermaid
+flowchart TB
+    Start((main.R))
+
+    Start --> P1[Part 1: Read Idat Files]
+    Start --> P2[Part 2: Detection P-Value QC]
+    Start --> P2b[Part 2b: Noob Normalize Idat Data]
+
+    P1 --> Merge[Part 2c: Merge Results and more QC]
+    P2 --> Merge
+    P2b --> Merge
+
+    Merge --> P3[Part 3: Calculate Beta Values and Filter]
+    P3 --> P4[Part 4: PCA by Batch or other Variables]
+    P4 --> End((End))
+```
 
 # Methylation Preprocessing Pipeline
 
-A modular, restartable preprocessing pipeline for Illumina 450K / EPIC methylation data built on **minfi** and **ENmix**.
+A modular, restartable preprocessing pipeline for Illumina 450K / EPIC methylation data built on minfi and ENmix.
 
 ## How to use
 
