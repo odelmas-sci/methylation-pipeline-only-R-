@@ -384,55 +384,84 @@ log_msg(sprintf("Stage 2 complete: %d/%d batches OK", sum(part2_ok), length(batc
 log_msg("", file = pipeline_log)
 log_msg("--- Stage 2b: NOOB normalization (per batch) ---", file = pipeline_log)
 
+worker_part2b <- function(p) {
+
+    batch_dir  <- file.path(p$outdir, paste0("batch", p$batch))
+    log_file   <- file.path(batch_dir, "part2b.log")
+    mset_rds   <- file.path(batch_dir,
+                            paste0("mSet_noob_batch", p$batch, ".rds"))
+    flag_p2b   <- file.path(batch_dir, ".completed")
+
+    if (!p$force && file.exists(mset_rds) && file.exists(flag_p2b)) {
+        return(list(batch = p$batch, status = "cached", elapsed = 0L))
+    }
+
+    t0 <- proc.time()[["elapsed"]]
+
+    rc <- system2(
+        "Rscript",
+        args   = c(p$script, p$batch, batch_dir, batch_dir),
+        stdout = log_file,
+        stderr = log_file,
+        wait   = TRUE
+    )
+
+    elapsed <- as.integer(round(proc.time()[["elapsed"]] - t0))
+
+    ok <- (rc == 0L && file.exists(mset_rds) && file.exists(flag_p2b))
+
+    list(
+        batch   = p$batch,
+        status  = if (ok) "success" else "failed",
+        elapsed = elapsed,
+        log     = log_file
+    )
+}
+
 if (length(batches_p2) == 0L) {
     log_msg("ERROR: No batches passed Stage 1 + 2. Cannot run Stage 2b.",
             file = pipeline_log)
     quit(status = 1L)
 }
 
-for (batch in batches_p2) {
+params2b <- lapply(batches_p2, function(b) list(
+    batch  = b,
+    outdir = outdir,
+    script = part2b_script,
+    force  = force2b
+))
 
-    batch_dir  <- file.path(outdir, paste0("batch", batch))
-    log_file2b <- file.path(batch_dir, "part2b.log")
-    mset_rds   <- file.path(batch_dir,
-                            paste0("mSet_noob_batch", batch, ".rds"))
-    flag_p2b   <- file.path(batch_dir, ".completed")
+n_w2b <- min(length(batches_p2), n_cores)
 
-    if (!force2b && file.exists(mset_rds) && file.exists(flag_p2b)) {
-        log_msg(sprintf("  Batch %d: outputs already exist — skipping (use --force-part2b to rerun)",
-                        batch),
-                file = pipeline_log)
-        next
-    }
-
-    log_msg(sprintf("  Batch %d: running NOOB normalization", batch),
+if (n_w2b > 1L) {
+    log_msg(sprintf("  Launching %d batches across %d workers",
+                    length(batches_p2), n_w2b),
             file = pipeline_log)
 
-    t0 <- proc.time()[["elapsed"]]
-
-    rc <- system2(
-        "Rscript",
-        args   = c(part2b_script,
-                   batch,
-                   batch_dir,
-                   batch_dir),
-        stdout = log_file2b,
-        stderr = log_file2b,
-        wait   = TRUE
+    cl <- makeCluster(n_w2b, type = "PSOCK")
+    part2b_res <- tryCatch(
+        parLapply(cl, params2b, worker_part2b),
+        finally = stopCluster(cl)
     )
+} else {
+    part2b_res <- lapply(params2b, worker_part2b)
+}
 
-    elapsed <- as.integer(round(proc.time()[["elapsed"]] - t0))
-
-    if (rc != 0L || !file.exists(mset_rds)) {
-        log_msg(sprintf("  Batch %d: FAILED (%ds)  log: %s",
-                        batch, elapsed, log_file2b),
-                file = pipeline_log)
-        quit(status = 1L)
+for (r in part2b_res) {
+    msg <- if (r$status == "cached") {
+        sprintf("  Batch %d: cached (skipped)", r$batch)
+    } else if (r$status == "success") {
+        sprintf("  Batch %d: SUCCESS (%ds)  log: %s",
+                r$batch, r$elapsed, r$log)
+    } else {
+        sprintf("  Batch %d: FAILED (%ds)  log: %s",
+                r$batch, r$elapsed, r$log)
     }
+    log_msg(msg, file = pipeline_log)
+}
 
-    log_msg(sprintf("  Batch %d: SUCCESS (%ds)  log: %s",
-                    batch, elapsed, log_file2b),
-            file = pipeline_log)
+if (any(sapply(part2b_res, `[[`, "status") == "failed")) {
+    quit(status = 1L)
 }
 
 # --------------------------------------------------------------------------------
