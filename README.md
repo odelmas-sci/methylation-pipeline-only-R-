@@ -10,12 +10,34 @@ flowchart TB
     P1 --> P2[Part 2: Detection P-Value QC]
     P1 --> P2b[Part 2b: Noob Normalize Idat Data]
 
-    P2 --> Merge[Part 2c: Merge Results and ENmix QC]
-    P2b --> Merge
+    P2 --> P2c[Part 2c: Merge Batches and ENmix QC]
+    P2b --> P2c
 
-    Merge --> P3[Part 3: Calculate Beta Values and Filter]
+    P2c --> P3[Part 3: Calculate Beta Values and Filter]
     P3 --> P4[Part 4: PCA by Batch or other Variables]
     P4 --> End((End))
+    
+    %% Style definitions
+    classDef parallel fill:#D6EAF8,stroke:#2980B9,stroke-width:2px;
+    classDef merge fill:#EAEDED,stroke:#566573,stroke-width:2px;
+    classDef sequential fill:#E8F8F5,stroke:#1ABC9C,stroke-width:2px;
+
+    %% Apply styles
+    class P1,P2,P2b parallel;
+    class P2c merge;
+    class P3,P4 sequential;
+   
+    %% Legend (compact, horizontal)
+    subgraph Legend[Legend]
+        L1[Parallel Batch Step]
+        L2[Merge/Sequential Step]
+        L3[Sequential Step]      
+    end
+
+    %% Color legend boxes
+    class L1 parallel;
+    class L2 merge;
+    class L3 sequential;
 ```
 
 # Methylation Preprocessing Pipeline
