@@ -26,6 +26,7 @@
 #   --force-part3     Force rerun Stage 3 even if cached
 #   --force-part4     Force rerun Stage 4 even if cached
 #   --meta-cols A,B   Comma-separated pData column names to color PCA by (default: Batch)
+#   --stop-after-part2c   Optional command to stop after QC in part2c
 #
 # Output layout:
 #   <outdir>/batch<N>/     Per-batch outputs from Part 1 and Part 2
@@ -108,7 +109,8 @@ if (length(argv) < 3) {
         "  --force-part2c     Force rerun Stage 2c (Part 2c) even if outputs exist\n",
         "  --force-part3     Force rerun Stage 3 (Part 3) even if outputs exist\n",
         "  --force-part4     Force rerun Stage 4 (Part 4) even if outputs exist\n",
-        "  --meta-cols A,B   pData columns to color PCA by, comma-separated (default: Batch)\n"
+        "  --meta-cols A,B   Data columns to color PCA by, comma-separated (default: Batch)\n",
+        "  --stop-after-part2c   Stop the pipeline after running QC in Part2c (default: FALSE)\n"
     ))
     quit(status = 1)
 }
@@ -121,6 +123,7 @@ n_cores     <- max(1L, detectCores(logical = FALSE) - 1L)
 batches_arg <- NULL
 meta_cols   <- "Batch"
 force1 <- force2 <- force2b <- force2c <- force3 <- force4 <- FALSE
+stop_after_part2c <- FALSE
 
 i <- 4L
 while (i <= length(argv)) {
@@ -142,6 +145,7 @@ while (i <= length(argv)) {
     } else if (argv[i] == "--force-part2c") { force2c <- TRUE; i <- i + 1L
     } else if (argv[i] == "--force-part3") { force3 <- TRUE; i <- i + 1L
     } else if (argv[i] == "--force-part4") { force4 <- TRUE; i <- i + 1L
+    } else if (argv[i] == "--stop-after-part2c") {stop_after_part2c <- TRUE; i <- i + 1L
     } else { i <- i + 1L }
 }
 
@@ -195,6 +199,7 @@ log_msg("Batch column : ", batch_col, file = pipeline_log)
 log_msg("Max workers  : ", n_cores,               file = pipeline_log)
 log_msg("Meta columns : ", meta_cols,                file = pipeline_log)
 log_msg("Force flags  : part1=", force1, " part2=", force2, " part2b=", force2b, " part2c=", force2c, " part3=", force3, " part4=", force4, file = pipeline_log)
+log_msg("Stop after Part2c : ", stop_after_part2c, file = pipeline_log)
 
 pipeline_start <- proc.time()[["elapsed"]]
 
@@ -515,7 +520,17 @@ if (!force2c && file.exists(qcinfo_rds) && file.exists(flag_p2c)) {
     log_msg(sprintf("  SUCCESS (%ds)  log: %s", elapsed, log_file2c),
             file = pipeline_log)
 }
-                            
+
+
+# ---- Optional stop after Part 2c ----
+if (stop_after_part2c) {
+    log_msg("Stopping pipeline after Part 2c.",
+            file = pipeline_log)
+    log_msg("Pipeline completed successfully up to Part 2c.",
+            file = pipeline_log)
+    quit(status = 0L)
+}
+
 # --------------------------------------------------------------------------------
 # STAGE 3 — Part 3: Calculate Betas (single combined run)
 #                        
